@@ -11,9 +11,10 @@ Google スプレッドシートに作成情報を並べて、メニューから�
 | --- | --- |
 | 認証 | Bearer トークン |
 | パスパラメータ | `organizationId`（必須） |
-| ボディ（必須） | `workspaceName`, `customWorkspaceType`（`google_sheet` / `manual_import`）、および `serviceId` か `serviceName` のいずれか |
-| ボディ（任意） | `serviceUrl`, `serviceMasterName` |
+| ボディ（必須） | `serviceId`, `workspaceName`, `customWorkspaceType`（`google_sheet` / `manual_import`） |
 | 成功レスポンス | `201`（`service` / `workspace` / `isNewService` を含む） |
+
+> ボディは公式 API Reference の Body Params に準拠しています（`serviceId` は必須）。
 
 ## ファイル構成
 
@@ -52,42 +53,37 @@ Google スプレッドシートに作成情報を並べて、メニューから�
 ## 使い方
 
 1. メニュー **Admina → 入力シートを準備** を実行し、`CustomWorkspaces` シートを作成します。
-2. 2行目以降に作成したいカスタムアプリを入力します。
+2. （`serviceId` が分からない場合）メニュー **Admina → サービス一覧を取得** を実行すると、`Services` シートに各サービスの `serviceId` / `name` が出力されます。ここから対象の `serviceId` を確認します。
+3. `CustomWorkspaces` シートの2行目以降に作成したいカスタムアプリを入力します。
 
    ### 入力列
 
    | 列 | 項目 | 必須 | 説明 |
    | --- | --- | --- | --- |
-   | A | `serviceId` | ※ | 既存の標準/カスタムサービスID（`serviceName` と排他） |
-   | B | `serviceName` | ※ | 新規カスタムサービスを作成する場合の名前（`serviceId` 未指定時） |
-   | C | `serviceUrl` | 任意 | カスタムサービスのURL |
-   | D | `serviceMasterName` | 任意 | サービスマスター名 |
-   | E | `workspaceName` | 必須 | ワークスペース名 |
-   | F | `customWorkspaceType` | 必須 | `google_sheet` / `manual_import` |
-
-   ※ `serviceId` か `serviceName` の **どちらか一方は必須** です。
+   | A | `serviceId` | 必須 | 対象サービスのID（標準/カスタム）。`Services` シートで確認 |
+   | B | `workspaceName` | 必須 | ワークスペース名 |
+   | C | `customWorkspaceType` | 必須 | `google_sheet` / `manual_import` |
 
    ### 出力列（実行後に自動入力）
 
    | 列 | 項目 | 説明 |
    | --- | --- | --- |
-   | G | `status` | 成功 / 失敗 / スキップ |
-   | H | `resultServiceId` | 作成または使用されたサービスID |
-   | I | `workspaceId` | 作成されたワークスペースID |
-   | J | `message` | エラーメッセージ等 |
-   | K | `processedAt` | 処理日時 |
+   | D | `status` | 成功 / 失敗 / スキップ |
+   | E | `resultServiceId` | 作成または使用されたサービスID |
+   | F | `workspaceId` | 作成されたワークスペースID |
+   | G | `message` | エラーメッセージ等 |
+   | H | `processedAt` | 処理日時 |
 
    #### 入力例
 
-   | serviceId | serviceName | serviceUrl | serviceMasterName | workspaceName | customWorkspaceType |
-   | --- | --- | --- | --- | --- | --- |
-   | 1 | | | | 営業部 経費スプレッドシート | google_sheet |
-   | | 自社内製ツール | https://example.com | | 手動取込アプリ | manual_import |
+   | serviceId | workspaceName | customWorkspaceType |
+   | --- | --- | --- |
+   | 1 | 営業部 経費スプレッドシート | google_sheet |
+   | 20 | 手動取込アプリ | manual_import |
 
-3. メニュー **Admina → カスタムアプリを一括作成** を実行します。
-4. 各行の出力列（`status` ほか）に結果が書き込まれます。
+4. メニュー **Admina → カスタムアプリを一括作成** を実行します。
+5. 各行の出力列（`status` ほか）に結果が書き込まれます。
    - `status` が `成功` の行は、再実行しても二重作成されないようスキップされます。
-   - 任意項目（`serviceUrl` / `serviceMasterName`）は、値が入っている行だけ送信されます。
 
 ## 単体で呼び出す場合
 
@@ -95,7 +91,6 @@ Google スプレッドシートに作成情報を並べて、メニューから�
 
 ```javascript
 function example() {
-  // 既存サービスIDを使う場合
   const result = createCustomWorkspace({
     serviceId: 1,
     workspaceName: 'テストアプリ',
@@ -103,14 +98,6 @@ function example() {
   });
   Logger.log(result.status); // 201
   Logger.log(result.body.workspace.id);
-
-  // 新規カスタムサービスを作成する場合
-  createCustomWorkspace({
-    serviceName: '自社内製ツール',
-    serviceUrl: 'https://example.com',
-    workspaceName: '手動取込アプリ',
-    customWorkspaceType: 'manual_import'
-  });
 }
 ```
 
@@ -126,8 +113,16 @@ function example() {
 2. ログに「前後に空白/改行あり: true」と出たら、スクリプト プロパティの `ADMINA_API_TOKEN` を空白なしで登録し直します（取得時に自動で `trim()` もしています）。
 3. `organizationId`（例: `99582691`）がトークンを発行した組織と一致しているか確認します。
 
+### `HTTP 400: bad_request` が出る
+
+リクエストボディが不正です。多くは **`serviceId` の指定漏れ** が原因です。
+
+1. `serviceId` 列が空でないか確認します（このエンドポイントでは必須）。
+2. `serviceId` が分からない場合は、メニュー **Admina → サービス一覧を取得** で `Services` シートを出力し、対象の `serviceId` を確認します。
+3. `customWorkspaceType` が `google_sheet` / `manual_import` のいずれかになっているか確認します。
+
 ## 注意事項
 
 - APIトークンはコードに直書きせず、スクリプトプロパティに保持しています。リポジトリにトークンをコミットしないでください。
-- サービスの指定は `serviceId`（既存サービス）か `serviceName`（新規カスタムサービス作成）の **どちらか一方** を使います。
+- このエンドポイントのボディは公式 API Reference に準拠し、`serviceId`（必須）で対象サービスを指定します。
 - 大量に作成する場合、レート制限に配慮して各リクエスト間に約0.3秒の待機を入れています（`CustomWorkspace.gs` で調整可能）。
