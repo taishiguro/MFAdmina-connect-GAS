@@ -232,8 +232,12 @@ function listServicesToSheet() {
   sheet.setFrozenRows(1);
 
   if (services.length === 0) {
-    SpreadsheetApp.getActiveSpreadsheet().toast(
-      'サービスは0件、または想定外のレスポンス形式でした。', SERVICES_SHEET_NAME, 8
+    SpreadsheetApp.getUi().alert(
+      'サービスは0件、または想定外のレスポンス形式でした。\n\n' +
+      'レスポンス形式を確認するには、Apps Script エディタで\n' +
+      '「diagnoseServices」関数を実行して実行ログを確認してください。\n\n' +
+      '生レスポンス（先頭500文字）:\n' +
+      JSON.stringify(body).substring(0, 500)
     );
     return;
   }

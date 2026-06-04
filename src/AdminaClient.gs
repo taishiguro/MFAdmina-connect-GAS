@@ -68,6 +68,22 @@ function fetchServices() {
 }
 
 /**
+ * サービス一覧APIのレスポンスをそのままログに出力する（診断用）。
+ * Apps Script エディタでこの関数を選んで「実行」し、「実行ログ」を確認する。
+ */
+function diagnoseServices() {
+  const organizationId = getOrganizationId_();
+  const url = ADMINA_API_BASE_URL +
+    '/organizations/' + encodeURIComponent(organizationId) + '/services';
+  Logger.log('===== サービス一覧診断 =====');
+  Logger.log('リクエストURL: ' + url);
+  const result = adminaFetch_('get', url, null);
+  Logger.log('HTTP ステータス: ' + result.status);
+  Logger.log('レスポンスボディ（先頭1000文字）:');
+  Logger.log(JSON.stringify(result.body).substring(0, 1000));
+}
+
+/**
  * Admina API への共通リクエスト処理。
  * Bearer 認証を付与し、レスポンスを解析して返す（例外を投げずに結果を返す）。
  *
