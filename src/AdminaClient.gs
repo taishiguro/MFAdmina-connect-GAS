@@ -8,26 +8,31 @@
  *
  * POST /organizations/{organizationId}/workspaces/custom
  *
- * 公式ドキュメント（API Reference）の Body Params に準拠し、以下の3項目を送信する。
- *   - serviceId           : 組織に属する標準サービスID または カスタムサービスID（必須）
- *   - workspaceName       : ワークスペース名（必須）
- *   - customWorkspaceType : 'google_sheet' または 'manual_import'（必須）
+ * APIは serviceIdentifier の種類に応じて3つのDTOを oneOf で受け付ける:
+ *   1. serviceId（数値）         : 組織に既存のサービスID → PublicCustomWorkspaceWithAdminaServiceDto
+ *   2. serviceMasterName（文字列）: Adminaマスター上のサービス名（例: "Tailscale"）→ PublicCustomWorkspaceWithServiceMasterDto
+ *   3. serviceName（文字列）      : 完全カスタムサービス名 → PublicCustomWorkspaceWithCustomServiceDto
+ *
+ * serviceIdentifier が数値なら DTO#1、文字列なら DTO#2 を使用する。
+ * DTO#3（完全カスタム）が必要な場合は params.useCustomService = true を指定する。
  *
  * @param {Object} params
- * @param {(number|string)} params.serviceId           対象サービスのID（必須）
- * @param {string}          params.workspaceName        ワークスペース名（必須）
- * @param {string}          params.customWorkspaceType  'google_sheet' または 'manual_import'（必須）
+ * @param {(number|string)} params.serviceIdentifier  数値なら serviceId、文字列なら serviceMasterName として送信（必須）
+ * @param {string}          params.workspaceName       ワークスペース名（必須）
+ * @param {string}          params.customWorkspaceType 'google_sheet' または 'manual_import'（必須）
+ * @param {boolean}         [params.useCustomService]  true のとき serviceIdentifier を serviceName として送信（DTO#3）
  * @return {{ok: boolean, status: number, body: Object}} 結果オブジェクト
  */
 function createCustomWorkspace(params) {
   params = params || {};
-  const serviceId = params.serviceId;
+  const serviceIdentifier = params.serviceIdentifier !== undefined ? params.serviceIdentifier : params.serviceId;
   const workspaceName = params.workspaceName;
   const customWorkspaceType = params.customWorkspaceType;
+  const useCustomService = params.useCustomService === true;
 
   // --- 入力チェック ---
-  if (serviceId === undefined || serviceId === null || String(serviceId).trim() === '') {
-    throw new Error('serviceId は必須です。');
+  if (serviceIdentifier === undefined || serviceIdentifier === null || String(serviceIdentifier).trim() === '') {
+    throw new Error('serviceIdentifier（serviceId または serviceMasterName）は必須です。');
   }
   if (!workspaceName || String(workspaceName).trim() === '') {
     throw new Error('workspaceName は必須です。');
@@ -43,11 +48,32 @@ function createCustomWorkspace(params) {
   const url = ADMINA_API_BASE_URL +
     '/organizations/' + encodeURIComponent(organizationId) + '/workspaces/custom';
 
-  const payload = {
-    serviceId: Number(serviceId),
-    workspaceName: String(workspaceName).trim(),
-    customWorkspaceType: customWorkspaceType
-  };
+  // serviceIdentifier の型に応じて送信フィールドを切り替え
+  const idStr = String(serviceIdentifier).trim();
+  const isNumeric = !isNaN(idStr) && idStr !== '';
+  let payload;
+  if (isNumeric && !useCustomService) {
+    // DTO#1: 既存サービスID（数値）
+    payload = {
+      serviceId: Number(idStr),
+      workspaceName: String(workspaceName).trim(),
+      customWorkspaceType: customWorkspaceType
+    };
+  } else if (useCustomService) {
+    // DTO#3: 完全カスタムサービス名
+    payload = {
+      serviceName: idStr,
+      workspaceName: String(workspaceName).trim(),
+      customWorkspaceType: customWorkspaceType
+    };
+  } else {
+    // DTO#2: Adminaサービスマスター名（例: "Tailscale", "Vercel"）
+    payload = {
+      serviceMasterName: idStr,
+      workspaceName: String(workspaceName).trim(),
+      customWorkspaceType: customWorkspaceType
+    };
+  }
 
   const response = adminaFetch_('post', url, payload);
   return response;
