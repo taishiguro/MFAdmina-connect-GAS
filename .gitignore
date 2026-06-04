@@ -1,0 +1,10 @@
+# clasp
+.clasp.json
+.clasprc.json
+
+# 認証情報・ローカル設定
+*.local
+credentials.json
+
+# OS
+.DS_Store
