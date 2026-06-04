@@ -80,7 +80,8 @@ function setupSheet() {
 
   // ヘッダーに入力ガイドのメモを付与
   sheet.getRange(1, COL.SERVICE_ID).setNote(
-    '対象サービスのID（必須）。「サービス一覧を取得」で確認できます。'
+    '数値（serviceId）: 組織に既存のサービスID。「サービス一覧を取得」で確認。\n' +
+    '文字列（例: Tailscale）: Adminaマスター上のサービス名（未接続サービスの新規登録に使用）。'
   );
   sheet.getRange(1, COL.WORKSPACE_NAME).setNote('ワークスペース名（必須）。');
   sheet.getRange(1, COL.CUSTOM_TYPE).setNote('google_sheet または manual_import（必須）。');
@@ -128,7 +129,7 @@ function createWorkspacesFromSheet() {
     const rowIndex = i + 2; // 実際のシート行番号
 
     const params = {
-      serviceId: row[COL.SERVICE_ID - 1],
+      serviceIdentifier: row[COL.SERVICE_ID - 1],
       workspaceName: row[COL.WORKSPACE_NAME - 1],
       customWorkspaceType: row[COL.CUSTOM_TYPE - 1]
     };
