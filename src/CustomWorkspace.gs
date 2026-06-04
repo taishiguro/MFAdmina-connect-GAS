@@ -10,9 +10,10 @@
  *   --- 出力 ---
  *   D: status               成功 / 失敗 / スキップ
  *   E: resultServiceId      作成または使用されたサービスID
- *   F: workspaceId          作成されたワークスペースID
- *   G: message              エラーメッセージ等
- *   H: processedAt          処理日時
+ *   F: isNewService         true なら新規サービスとして登録された
+ *   G: workspaceId          作成されたワークスペースID
+ *   H: message              エラーメッセージ等
+ *   I: processedAt          処理日時
  *
  * serviceId が分からない場合は、メニュー「Admina → サービス一覧を取得」で
  * 「Services」シートに id と名前を出力できます。
@@ -24,6 +25,7 @@ const HEADER_ROW = [
   'customWorkspaceType',
   'status',
   'resultServiceId',
+  'isNewService',
   'workspaceId',
   'message',
   'processedAt'
@@ -35,9 +37,10 @@ const COL = {
   CUSTOM_TYPE: 3,
   STATUS: 4,
   RESULT_SERVICE_ID: 5,
-  WORKSPACE_ID: 6,
-  MESSAGE: 7,
-  PROCESSED_AT: 8
+  IS_NEW_SERVICE: 6,
+  WORKSPACE_ID: 7,
+  MESSAGE: 8,
+  PROCESSED_AT: 9
 };
 
 /** サービス一覧の出力先シート名 */
@@ -153,15 +156,16 @@ function createWorkspacesFromSheet() {
         const body = result.body || {};
         const workspace = body.workspace || {};
         const service = body.service || workspace.service || {};
-        writeResult_(sheet, rowIndex, STATUS_SUCCESS, service.id || '', workspace.id || '', '', now);
+        const isNew = body.isNewService === undefined ? '' : body.isNewService;
+        writeResult_(sheet, rowIndex, STATUS_SUCCESS, service.id || '', isNew, workspace.id || '', '', now);
         successCount++;
       } else {
         const message = extractErrorMessage_(result);
-        writeResult_(sheet, rowIndex, STATUS_FAILED, '', '', 'HTTP ' + result.status + ': ' + message, now);
+        writeResult_(sheet, rowIndex, STATUS_FAILED, '', '', '', 'HTTP ' + result.status + ': ' + message, now);
         failCount++;
       }
     } catch (e) {
-      writeResult_(sheet, rowIndex, STATUS_FAILED, '', '', String(e && e.message ? e.message : e), now);
+      writeResult_(sheet, rowIndex, STATUS_FAILED, '', '', '', String(e && e.message ? e.message : e), now);
       failCount++;
     }
 
@@ -179,9 +183,10 @@ function createWorkspacesFromSheet() {
 /**
  * 1行分の結果をシートに書き込む。
  */
-function writeResult_(sheet, rowIndex, status, resultServiceId, workspaceId, message, processedAt) {
+function writeResult_(sheet, rowIndex, status, resultServiceId, isNewService, workspaceId, message, processedAt) {
   sheet.getRange(rowIndex, COL.STATUS).setValue(status);
   sheet.getRange(rowIndex, COL.RESULT_SERVICE_ID).setValue(resultServiceId);
+  sheet.getRange(rowIndex, COL.IS_NEW_SERVICE).setValue(isNewService);
   sheet.getRange(rowIndex, COL.WORKSPACE_ID).setValue(workspaceId);
   sheet.getRange(rowIndex, COL.MESSAGE).setValue(message);
   sheet.getRange(rowIndex, COL.PROCESSED_AT).setValue(
