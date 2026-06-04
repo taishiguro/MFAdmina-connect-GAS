@@ -212,6 +212,8 @@ function listServicesToSheet() {
   let services = [];
   if (Array.isArray(body)) {
     services = body;
+  } else if (body && Array.isArray(body.items)) {
+    services = body.items;
   } else if (body && Array.isArray(body.services)) {
     services = body.services;
   } else if (body && Array.isArray(body.data)) {
