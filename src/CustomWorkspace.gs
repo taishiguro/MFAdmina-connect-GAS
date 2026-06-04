@@ -45,7 +45,7 @@ function onOpen() {
     .addItem('入力シートを準備', 'setupSheet')
     .addSeparator()
     .addItem('カスタムアプリを一括作成', 'createWorkspacesFromSheet')
-    .toUi();
+    .addToUi();
 }
 
 /**
