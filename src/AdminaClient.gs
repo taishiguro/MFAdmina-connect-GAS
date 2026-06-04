@@ -114,3 +114,42 @@ function adminaFetch_(method, url, payload) {
     body: body
   };
 }
+
+/**
+ * 認証の疎通確認（診断用）。
+ * エディタでこの関数を選んで「実行」し、上部の「実行ログ」を確認する。
+ * トークン / organizationId のどちらに問題があるかを切り分ける。
+ *
+ * 判定の目安:
+ *   - GET が 401  → トークンが無効、または別組織のトークン（要再発行・確認）
+ *   - GET が 200/403/404 → トークン自体は有効（401は作成APIのボディ/権限側を疑う）
+ */
+function diagnoseAuth() {
+  const props = PropertiesService.getScriptProperties();
+  const rawToken = props.getProperty(PROP_KEY_API_TOKEN);
+  const rawOrgId = props.getProperty(PROP_KEY_ORGANIZATION_ID);
+
+  Logger.log('===== Admina 認証診断 =====');
+  Logger.log('organizationId: ' + (rawOrgId || '(未設定)'));
+
+  if (!rawToken) {
+    Logger.log('APIトークン: (未設定) ← スクリプトプロパティ ' + PROP_KEY_API_TOKEN + ' を登録してください');
+    return;
+  }
+  Logger.log('トークン文字数: ' + rawToken.length);
+  Logger.log('前後に空白/改行あり: ' + (rawToken !== rawToken.trim()));
+  Logger.log('トークン先頭/末尾: ' +
+    rawToken.trim().substring(0, 4) + '…' + rawToken.trim().slice(-4));
+
+  // 読み取り系エンドポイントで疎通確認（GET）
+  const url = ADMINA_API_BASE_URL +
+    '/organizations/' + encodeURIComponent(String(rawOrgId).trim()) + '/workspaces';
+  const res = UrlFetchApp.fetch(url, {
+    method: 'get',
+    headers: { accept: 'application/json', Authorization: 'Bearer ' + rawToken.trim() },
+    muteHttpExceptions: true
+  });
+  Logger.log('----- 疎通テスト GET ' + url + ' -----');
+  Logger.log('HTTP ' + res.getResponseCode());
+  Logger.log((res.getContentText() || '').substring(0, 300));
+}

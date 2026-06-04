@@ -47,7 +47,7 @@ function getApiToken_() {
       PROP_KEY_API_TOKEN + ' を登録してください。'
     );
   }
-  return token;
+  return token.trim(); // コピペ時に混入しがちな前後の空白・改行を除去
 }
 
 /**
@@ -62,5 +62,5 @@ function getOrganizationId_() {
       PROP_KEY_ORGANIZATION_ID + ' を登録してください。'
     );
   }
-  return orgId;
+  return String(orgId).trim();
 }
