@@ -3,20 +3,30 @@
  * スプレッドシートからの一括作成と、スプレッドシートUI（メニュー）。
  *
  * シート構成（1行目=ヘッダー、2行目以降=データ）:
- *   A: serviceId            （必須）作成元のサービスID
- *   B: workspaceName        （必須）ワークスペース名
- *   C: customWorkspaceType  （必須）google_sheet または manual_import
- *   D: status               （出力）成功 / 失敗 / スキップ
- *   E: workspaceId          （出力）作成されたワークスペースID
- *   F: message              （出力）エラーメッセージ等
- *   G: processedAt          （出力）処理日時
+ *   --- 入力（サービスの指定は serviceId か serviceName のいずれか必須） ---
+ *   A: serviceId            既存の標準/カスタムサービスID（serviceName と排他）
+ *   B: serviceName          新規カスタムサービス名（serviceId 未指定時に使用）
+ *   C: serviceUrl           カスタムサービスのURL（任意）
+ *   D: serviceMasterName    サービスマスター名（任意）
+ *   E: workspaceName        （必須）ワークスペース名
+ *   F: customWorkspaceType  （必須）google_sheet または manual_import
+ *   --- 出力 ---
+ *   G: status               成功 / 失敗 / スキップ
+ *   H: resultServiceId      作成または使用されたサービスID
+ *   I: workspaceId          作成されたワークスペースID
+ *   J: message              エラーメッセージ等
+ *   K: processedAt          処理日時
  */
 
 const HEADER_ROW = [
   'serviceId',
+  'serviceName',
+  'serviceUrl',
+  'serviceMasterName',
   'workspaceName',
   'customWorkspaceType',
   'status',
+  'resultServiceId',
   'workspaceId',
   'message',
   'processedAt'
@@ -24,12 +34,16 @@ const HEADER_ROW = [
 
 const COL = {
   SERVICE_ID: 1,
-  WORKSPACE_NAME: 2,
-  CUSTOM_TYPE: 3,
-  STATUS: 4,
-  WORKSPACE_ID: 5,
-  MESSAGE: 6,
-  PROCESSED_AT: 7
+  SERVICE_NAME: 2,
+  SERVICE_URL: 3,
+  SERVICE_MASTER_NAME: 4,
+  WORKSPACE_NAME: 5,
+  CUSTOM_TYPE: 6,
+  STATUS: 7,
+  RESULT_SERVICE_ID: 8,
+  WORKSPACE_ID: 9,
+  MESSAGE: 10,
+  PROCESSED_AT: 11
 };
 
 const STATUS_SUCCESS = '成功';
@@ -62,6 +76,18 @@ function setupSheet() {
     .setFontWeight('bold')
     .setBackground('#f1f3f4');
   sheet.setFrozenRows(1);
+
+  // ヘッダーに入力ガイドのメモを付与
+  sheet.getRange(1, COL.SERVICE_ID).setNote(
+    '既存の標準/カスタムサービスID。serviceName と排他（どちらか必須）。'
+  );
+  sheet.getRange(1, COL.SERVICE_NAME).setNote(
+    '新規カスタムサービスを作成する場合の名前。serviceId を指定しない場合に使用。'
+  );
+  sheet.getRange(1, COL.SERVICE_URL).setNote('カスタムサービスのURL（任意）。');
+  sheet.getRange(1, COL.SERVICE_MASTER_NAME).setNote('サービスマスター名（任意）。');
+  sheet.getRange(1, COL.WORKSPACE_NAME).setNote('ワークスペース名（必須）。');
+  sheet.getRange(1, COL.CUSTOM_TYPE).setNote('google_sheet または manual_import（必須）。');
 
   // customWorkspaceType 列にプルダウンを設定
   const typeRule = SpreadsheetApp.newDataValidation()
@@ -105,13 +131,22 @@ function createWorkspacesFromSheet() {
     const row = values[i];
     const rowIndex = i + 2; // 実際のシート行番号
 
-    const serviceId = row[COL.SERVICE_ID - 1];
-    const workspaceName = row[COL.WORKSPACE_NAME - 1];
-    const customType = row[COL.CUSTOM_TYPE - 1];
+    const params = {
+      serviceId: row[COL.SERVICE_ID - 1],
+      serviceName: row[COL.SERVICE_NAME - 1],
+      serviceUrl: row[COL.SERVICE_URL - 1],
+      serviceMasterName: row[COL.SERVICE_MASTER_NAME - 1],
+      workspaceName: row[COL.WORKSPACE_NAME - 1],
+      customWorkspaceType: row[COL.CUSTOM_TYPE - 1]
+    };
     const currentStatus = row[COL.STATUS - 1];
 
-    // 空行はスキップ
-    if (serviceId === '' && workspaceName === '' && customType === '') {
+    // 入力列がすべて空の行はスキップ
+    const allEmpty = [
+      params.serviceId, params.serviceName, params.serviceUrl,
+      params.serviceMasterName, params.workspaceName, params.customWorkspaceType
+    ].every(function (v) { return v === '' || v === null || v === undefined; });
+    if (allEmpty) {
       continue;
     }
 
@@ -123,19 +158,21 @@ function createWorkspacesFromSheet() {
 
     const now = new Date();
     try {
-      const result = createCustomWorkspace(serviceId, workspaceName, customType);
+      const result = createCustomWorkspace(params);
 
       if (result.ok) {
-        const workspace = (result.body && result.body.workspace) || {};
-        writeResult_(sheet, rowIndex, STATUS_SUCCESS, workspace.id || '', '', now);
+        const body = result.body || {};
+        const workspace = body.workspace || {};
+        const service = body.service || workspace.service || {};
+        writeResult_(sheet, rowIndex, STATUS_SUCCESS, service.id || '', workspace.id || '', '', now);
         successCount++;
       } else {
         const message = extractErrorMessage_(result);
-        writeResult_(sheet, rowIndex, STATUS_FAILED, '', 'HTTP ' + result.status + ': ' + message, now);
+        writeResult_(sheet, rowIndex, STATUS_FAILED, '', '', 'HTTP ' + result.status + ': ' + message, now);
         failCount++;
       }
     } catch (e) {
-      writeResult_(sheet, rowIndex, STATUS_FAILED, '', String(e && e.message ? e.message : e), now);
+      writeResult_(sheet, rowIndex, STATUS_FAILED, '', '', String(e && e.message ? e.message : e), now);
       failCount++;
     }
 
@@ -153,8 +190,9 @@ function createWorkspacesFromSheet() {
 /**
  * 1行分の結果をシートに書き込む。
  */
-function writeResult_(sheet, rowIndex, status, workspaceId, message, processedAt) {
+function writeResult_(sheet, rowIndex, status, resultServiceId, workspaceId, message, processedAt) {
   sheet.getRange(rowIndex, COL.STATUS).setValue(status);
+  sheet.getRange(rowIndex, COL.RESULT_SERVICE_ID).setValue(resultServiceId);
   sheet.getRange(rowIndex, COL.WORKSPACE_ID).setValue(workspaceId);
   sheet.getRange(rowIndex, COL.MESSAGE).setValue(message);
   sheet.getRange(rowIndex, COL.PROCESSED_AT).setValue(
